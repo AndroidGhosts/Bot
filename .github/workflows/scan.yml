@@ -1,40 +1,40 @@
-name: Domain Scanner
+name: "Domain Scanner"
 
 on:
   workflow_dispatch:
     inputs:
       domain:
-        description: 'Domain to scan'
+        description: "Domain to scan"
         required: true
-        default: 'example.com'
+        default: "example.com"
   schedule:
-    - cron: '0 0 * * *'  # تشغيل يومياً
+    - cron: "0 0 * * *"
 
 jobs:
   scan:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v3
+      - name: "Checkout code"
+        uses: actions/checkout@v3
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
+      - name: "Set up Python"
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.9"
 
-    - name: Install dependencies
-      run: |
-        pip install -r requirements.txt
+      - name: "Install dependencies"
+        run: |
+          pip install -r requirements.txt
 
-    - name: Run domain scanner
-      env:
-        SCAN_DOMAIN: ${{ github.event.inputs.domain }}
-      run: |
-        python bot.py
+      - name: "Run domain scanner"
+        env:
+          SCAN_DOMAIN: ${{ github.event.inputs.domain }}
+        run: |
+          python bot.py
 
-    - name: Upload scan results
-      uses: actions/upload-artifact@v3
-      with:
-        name: scan-results
-        path: scan_result.txt
+      - name: "Upload scan results"
+        uses: actions/upload-artifact@v3
+        with:
+          name: "scan-results"
+          path: "scan_result.txt"
