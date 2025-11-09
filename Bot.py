@@ -8,8 +8,6 @@ import ssl
 from urllib.parse import urlparse
 import os
 from datetime import datetime
-from bs4 import BeautifulSoup
-import whois
 
 # تعطيل تحذيرات HTTPS غير الموثوقة
 import urllib3
@@ -21,7 +19,6 @@ TELEGRAM_CHANNEL = "https://t.me/Android_Ghosts"
 # قواعد بيانات متقدمة
 ADVANCED_SOURCES = [
     "https://crt.sh/?q={}&output=json",
-    "https://api.certspotter.com/v1/issuances?domain={}&include_subdomains=true&expand=dns_names",
     "https://api.subdomain.center/?domain={}",
     "https://api.hackertarget.com/hostsearch/?q={}",
     "https://sonar.omnisint.io/subdomains/{}"
@@ -32,19 +29,8 @@ CUSTOM_SUBDOMAINS = [
     'www', 'mail', 'ftp', 'blog', 'api', 'admin', 'shop', 'store', 
     'forum', 'support', 'help', 'docs', 'dev', 'test', 'staging',
     'app', 'apps', 'cdn', 'static', 'assets', 'media', 'img', 'images',
-    'upload', 'download', 'portal', 'login', 'auth', 'secure',
-    'dashboard', 'panel', 'wordpress', 'wp', 'joomla', 'drupal'
+    'upload', 'download', 'portal', 'login', 'auth', 'secure'
 ]
-
-# CDN detection patterns
-CDN_PROVIDERS = {
-    'Cloudflare': ['cloudflare', 'cf-'],
-    'CloudFront': ['cloudfront', 'awsdns'],
-    'Akamai': ['akamai', 'akamaiedge'],
-    'Fastly': ['fastly', 'fastly.net'],
-    'Azure CDN': ['azureedge'],
-    'Google Cloud CDN': ['googleusercontent']
-}
 
 # Create session with common settings
 SESSION = requests.Session()
@@ -54,7 +40,7 @@ SESSION.headers.update({
     'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
 })
 
-class UltimateDomainScanner:
+class DomainScanner:
     def __init__(self):
         self.subdomain_list = CUSTOM_SUBDOMAINS
         
@@ -67,28 +53,11 @@ class UltimateDomainScanner:
             
             with socket.create_connection((hostname, 443), timeout=10) as sock:
                 with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                    cert = ssock.getpeercert()
-                    
-                    subject = {}
-                    issuer = {}
-                    
-                    if cert and 'subject' in cert:
-                        for item in cert['subject']:
-                            for key, value in item:
-                                subject[key] = value
-                    
-                    if cert and 'issuer' in cert:
-                        for item in cert['issuer']:
-                            for key, value in item:
-                                issuer[key] = value
-                    
                     return {
                         'protocol': ssock.version(),
-                        'cipher_suite': ssock.cipher()[0] if ssock.cipher() else 'Unknown',
-                        'subject': subject,
-                        'issuer': issuer
+                        'cipher_suite': ssock.cipher()[0] if ssock.cipher() else 'Unknown'
                     }
-        except Exception as e:
+        except:
             return None
     
     def get_technologies(self, hostname):
@@ -111,67 +80,16 @@ class UltimateDomainScanner:
                     technologies['web_servers'].append('Apache')
                 if 'nginx' in server:
                     technologies['web_servers'].append('Nginx')
-                if 'iis' in server:
-                    technologies['web_servers'].append('IIS')
             
             # كشف لغات البرمجة
             if '.php' in content or 'php' in content.lower():
                 technologies['programming_languages'].append('PHP')
             if 'wordpress' in content.lower():
                 technologies['cms'].append('WordPress')
-            if 'drupal' in content.lower():
-                technologies['cms'].append('Drupal')
-            if 'joomla' in content.lower():
-                technologies['cms'].append('Joomla')
             
             return technologies
-            
         except:
             return technologies
-    
-    def detect_cdn(self, hostname):
-        """كشف مزودي CDN"""
-        cdn_info = {'provider': None, 'cname': None}
-        
-        try:
-            # فحص CNAME
-            try:
-                answers = dns.resolver.resolve(hostname, 'CNAME')
-                for rdata in answers:
-                    cname = str(rdata.target).lower()
-                    cdn_info['cname'] = cname
-                    for provider, patterns in CDN_PROVIDERS.items():
-                        for pattern in patterns:
-                            if pattern.lower() in cname:
-                                cdn_info['provider'] = provider
-                                return cdn_info
-            except:
-                pass
-            
-            # فحص الرؤوس
-            headers = self.get_http_headers(hostname)
-            for provider, patterns in CDN_PROVIDERS.items():
-                for pattern in patterns:
-                    for header, value in headers.items():
-                        if pattern.lower() in str(value).lower():
-                            cdn_info['provider'] = provider
-                            return cdn_info
-            
-        except:
-            pass
-        
-        return cdn_info
-    
-    def get_http_headers(self, url):
-        """الحصول على رؤوس HTTP"""
-        try:
-            if not url.startswith('http'):
-                url = f"https://{url}"
-            
-            response = SESSION.head(url, timeout=10, allow_redirects=True)
-            return dict(response.headers)
-        except:
-            return {}
     
     def find_linked_assets(self, hostname):
         """اكتشاف الأصول المرتبطة"""
@@ -189,8 +107,7 @@ class UltimateDomainScanner:
             # البحث عن أنماط
             patterns = [
                 r'src=["\'](https?://[^"\']+)["\']',
-                r'href=["\'](https?://[^"\']+)["\']',
-                r'url\(["\']?(https?://[^"\')]+)["\']?\)'
+                r'href=["\'](https?://[^"\']+)["\']'
             ]
             
             for pattern in patterns:
@@ -215,14 +132,6 @@ class UltimateDomainScanner:
                 if 'crt.sh' in url:
                     data = response.json()
                     return [item['name_value'].lower().strip() for item in data if domain in item['name_value']]
-                elif 'certspotter' in url:
-                    data = response.json()
-                    subdomains = []
-                    for item in data:
-                        for name in item.get('dns_names', []):
-                            if domain in name:
-                                subdomains.append(name.lower().strip())
-                    return subdomains
                 elif 'hackertarget' in url:
                     data = response.text
                     return [line.split(',')[0].strip() for line in data.split('\n') if domain in line]
@@ -287,7 +196,6 @@ class UltimateDomainScanner:
             'hostname': hostname,
             'ip': None,
             'tls_info': None,
-            'cdn': None,
             'technologies': None,
             'linked_assets': []
         }
@@ -298,7 +206,6 @@ class UltimateDomainScanner:
             
             # معلومات متقدمة
             result['tls_info'] = self.get_tls_info(hostname)
-            result['cdn'] = self.detect_cdn(hostname)
             result['technologies'] = self.get_technologies(hostname)
             result['linked_assets'] = list(self.find_linked_assets(hostname))
             
@@ -307,8 +214,8 @@ class UltimateDomainScanner:
         
         return result
 
-# إنشاء الماسح الضوئي المتقدم
-scanner = UltimateDomainScanner()
+# إنشاء الماسح الضوئي
+scanner = DomainScanner()
 
 def github_scan_domain(domain):
     """وظيفة المسح للنطاق لـ GitHub Actions"""
@@ -324,7 +231,7 @@ def github_scan_domain(domain):
         
         print("🔍 جاري تحليل السبردومينات النشطة...")
         active_subdomains = []
-        for subdomain in all_subdomains[:20]:
+        for subdomain in all_subdomains[:15]:
             try:
                 analysis = scanner.comprehensive_analysis(subdomain)
                 if analysis['ip']:
@@ -345,10 +252,6 @@ def github_scan_domain(domain):
             report += f"""
 • النطاق: {main_analysis['hostname']}
 • IP: {main_analysis['ip']}"""
-        
-        if main_analysis['cdn']['provider']:
-            report += f"""
-• CDN: {main_analysis['cdn']['provider']}"""
         
         if main_analysis['tls_info']:
             report += f"""
@@ -373,16 +276,15 @@ def github_scan_domain(domain):
         if active_subdomains:
             report += f"""
 🌐 أهم السبردومينات النشطة:"""
-            for i, sub in enumerate(active_subdomains[:8], 1):
-                cdn_info = f" | CDN: {sub['cdn']['provider']}" if sub['cdn']['provider'] else ""
+            for i, sub in enumerate(active_subdomains[:5], 1):
                 report += f"""
-{i}. {sub['hostname']}{cdn_info}"""
+{i}. {sub['hostname']}"""
         
         # الأصول المرتبطة
         if main_analysis['linked_assets']:
             report += f"""
 🔗 الأصول الخارجية المرتبطة:"""
-            for asset in list(main_analysis['linked_assets'])[:5]:
+            for asset in list(main_analysis['linked_assets'])[:3]:
                 report += f"""
 • {asset}"""
         
