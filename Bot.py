@@ -10,7 +10,6 @@ import time
 import urllib3
 import os
 from datetime import datetime
-import asyncio
 import threading
 from bs4 import BeautifulSoup
 import whois
@@ -18,9 +17,6 @@ import ipaddress
 
 # تعطيل تحذيرات HTTPS غير الموثوقة
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
-# التوكن الخاص بك
-TOKEN = "8563380581:AAFKao_OiIt0hQast08QklEQsqFUm4UjFZA"
 
 # رابط قناتك
 TELEGRAM_CHANNEL = "https://t.me/Android_Ghosts"
@@ -186,11 +182,8 @@ class UltimateDomainScanner:
         
         for port in ports:
             try:
-                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
-                    sock.settimeout(2)
-                    result = sock.connect_ex((hostname, port))
-                    if result == 0:
-                        open_ports.append(port)
+                with socket.create_connection((hostname, port), timeout=2):
+                    open_ports.append(port)
             except:
                 pass
         
@@ -204,8 +197,7 @@ class UltimateDomainScanner:
             'frameworks': [],
             'databases': [],
             'cms': [],
-            'analytics': [],
-            'javascript': []
+            'analytics': []
         }
         
         try:
@@ -291,8 +283,7 @@ class UltimateDomainScanner:
                 'creation_date': str(domain_info.creation_date),
                 'expiration_date': str(domain_info.expiration_date),
                 'name_servers': domain_info.name_servers,
-                'status': domain_info.status,
-                'emails': domain_info.emails
+                'status': domain_info.status
             }
         except:
             return {}
@@ -383,8 +374,7 @@ class UltimateDomainScanner:
             patterns = [
                 r'["\'](https?://[^"\']+)["\']',
                 r'url\(["\']?(https?://[^"\')]+)["\']?\)',
-                r'["\'](//[^"\']+)["\']',
-                r'window\.location[^=]*=[^"\' ]*["\']([^"\']+)["\']'
+                r'["\'](//[^"\']+)["\']'
             ]
             
             for pattern in patterns:
@@ -440,7 +430,7 @@ class UltimateDomainScanner:
         all_subdomains = set()
         
         # البحث في المصادر المتقدمة
-        with ThreadPoolExecutor(max_workers=10) as executor:
+        with ThreadPoolExecutor(max_workers=5) as executor:
             futures = [executor.submit(self.query_advanced_source, url, domain) for url in ADVANCED_SOURCES]
             
             for future in futures:
@@ -456,15 +446,15 @@ class UltimateDomainScanner:
                     continue
         
         # DNS Brute Force
-        with ThreadPoolExecutor(max_workers=20) as executor:
+        with ThreadPoolExecutor(max_workers=10) as executor:
             futures = []
-            for sub in self.subdomain_list:
+            for sub in self.subdomain_list[:50]:  # أول 50 فقط لأداء أفضل
                 full_domain = f"{sub}.{domain}"
                 futures.append(executor.submit(self.check_domain, full_domain))
             
             for future in futures:
                 try:
-                    result = future.result(timeout=5)
+                    result = future.result(timeout=3)
                     if result:
                         all_subdomains.add(result)
                 except:
@@ -492,7 +482,6 @@ class UltimateDomainScanner:
             'technologies': None,
             'open_ports': [],
             'linked_assets': [],
-            'dns_records': {},
             'domain_info': {},
             'timestamp': datetime.now().isoformat()
         }
@@ -519,352 +508,60 @@ class UltimateDomainScanner:
 # إنشاء الماسح الضوئي المتقدم
 scanner = UltimateDomainScanner()
 
-# Telegram Bot Code (سيتم استبداله بـ GitHub Actions)
-def run_telegram_bot():
-    """تشغيل بوت التليجرام - للاستخدام المحلي فقط"""
+def github_scan_domain(domain):
+    """وظيفة المسح للنطاق لـ GitHub Actions"""
+    print(f"🚀 بدء الفحص العميق لـ: {domain}")
+    print("⏳ جاري جمع البيانات...")
+    
     try:
-        from telegram import Update
-        from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+        # التحليل الشامل للنطاق الرئيسي
+        main_analysis = scanner.comprehensive_analysis(domain)
         
-        async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            user = update.message.from_user
-            welcome_text = f"""مرحباً {user.first_name}! 🚀
-
-IPScannerGHOST Bot - الإصدار الأقوى على الإطلاق
-
-أقوى بوت لتحليل النطاقات واكتشاف الثغرات
-
-🔬 المميزات المتقدمة:
-• اكتشاف سبردومينات متقدم من 6+ مصادر
-• تحليل TLS/SSL متعمق
-• كشف CDN + WAF + التقنيات المستخدمة
-• فحص المنافذ المفتوحة
-• تحليل WHOIS للنطاقات
-• اكتشاف الأصول والموارد
-
-🎯 الأوامر المتاحة:
-/scan [نطاق] - فحص سريع
-/fullscan [نطاق] - فحص شامل متقدم
-/deepscan [نطاق] - فحص عميق شامل
-/techscan [نطاق] - فحص التقنيات المستخدمة
-
-🔗 انضم لقناتنا: {TELEGRAM_CHANNEL}
-
-📝 مثال:
-/fullscan example.com
-/deepscan target.com"""
-            await update.message.reply_text(welcome_text)
-
-        async def deepscan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            if not context.args:
-                await update.message.reply_text("❌ يرجى إدخال نطاق (مثال: /deepscan example.com)")
-                return
-            
-            domain = context.args[0].lower()
-            processing_msg = await update.message.reply_text(f"🔬 بدء الفحص العميق لـ: {domain}\n⏳ قد يستغرق 3-5 دقائق...")
-            
+        print("🔍 جاري الاكتشاف المتقدم للسبردومينات...")
+        all_subdomains = scanner.advanced_subdomain_discovery(domain)
+        
+        print("🔍 جاري تحليل السبردومينات النشطة...")
+        active_subdomains = []
+        for subdomain in all_subdomains[:30]:  # أول 30 سبردومين
             try:
-                # التحليل الشامل للنطاق الرئيسي
-                main_analysis = scanner.comprehensive_analysis(domain)
-                
-                # اكتشاف السبردومينات المتقدم
-                await processing_msg.edit_text(f"🔍 جاري الاكتشاف المتقدم للسبردومينات...")
-                all_subdomains = scanner.advanced_subdomain_discovery(domain)
-                
-                # تحليل السبردومينات النشطة
-                await processing_msg.edit_text(f"🔍 جاري تحليل السبردومينات النشطة...")
-                active_subdomains = []
-                for subdomain in all_subdomains[:50]:
-                    try:
-                        analysis = scanner.comprehensive_analysis(subdomain)
-                        if analysis['ip']:
-                            active_subdomains.append(analysis)
-                    except:
-                        continue
-                
-                # بناء التقرير الشامل
-                report = f"""🔬 تقرير الفحص العميق: {domain}
+                analysis = scanner.comprehensive_analysis(subdomain)
+                if analysis['ip']:
+                    active_subdomains.append(analysis)
+            except:
+                continue
+        
+        # بناء التقرير الشامل
+        report = f"""🔬 تقرير الفحص العميق: {domain}
 
 📊 إحصائيات الاكتشاف:
 • السبردومينات المكتشفة: {len(all_subdomains)}
 • السبردومينات النشطة: {len(active_subdomains)}
+• مصادر البحث: {len(ADVANCED_SOURCES)}
 
 🌐 المعلومات الأساسية:"""
-                
-                if main_analysis['ip']:
-                    report += f"""
+        
+        if main_analysis['ip']:
+            report += f"""
 • النطاق: {main_analysis['hostname']}
 • IP: {main_analysis['ip']}"""
-                
-                if main_analysis['cdn']['provider']:
-                    report += f"""
-• CDN: {main_analysis['cdn']['provider']}"""
-                
-                if main_analysis['waf']['provider']:
-                    report += f"""
+        
+        if main_analysis['cdn']['provider']:
+            report += f"""
+• CDN: {main_analysis['cdn']['provider']} (ثقة: {main_analysis['cdn']['confidence']})"""
+        
+        if main_analysis['waf']['provider']:
+            report += f"""
 • WAF: {main_analysis['waf']['provider']}"""
-                
-                if main_analysis['open_ports']:
-                    report += f"""
+        
+        if main_analysis['open_ports']:
+            report += f"""
 • المنافذ المفتوحة: {', '.join(map(str, main_analysis['open_ports']))}"""
-                
-                # التقنيات
-                if main_analysis['technologies']:
-                    report += f"""
-🔧 التقنيات الرئيسية:"""
-                    tech = main_analysis['technologies']
-                    if tech['web_servers']:
-                        report += f"""
-• السيرفر: {', '.join(set(tech['web_servers']))}"""
-                    if tech['programming_languages']:
-                        report += f"""
-• اللغات: {', '.join(set(tech['programming_languages']))}"""
-                    if tech['cms']:
-                        report += f"""
-• CMS: {', '.join(set(tech['cms']))}"""
-                
-                # السبردومينات النشطة
-                if active_subdomains:
-                    report += f"""
-🌐 أهم السبردومينات النشطة:"""
-                    for i, sub in enumerate(active_subdomains[:10], 1):
-                        cdn_info = f" | CDN: {sub['cdn']['provider']}" if sub['cdn']['provider'] else ""
-                        report += f"""
-{i}. {sub['hostname']}{cdn_info}"""
-                
-                report += f"""
-
-✅ تم الفحص العميق بنجاح!
-
-🔗 انضم لقناتنا: {TELEGRAM_CHANNEL}"""
-                
-                await processing_msg.edit_text(report)
-                
-            except Exception as e:
-                await processing_msg.edit_text(f"❌ خطأ في الفحص العميق: {str(e)}")
-
-        async def techscan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            if not context.args:
-                await update.message.reply_text("❌ يرجى إدخال نطاق (مثال: /techscan example.com)")
-                return
-            
-            domain = context.args[0].lower()
-            processing_msg = await update.message.reply_text(f"🔧 بدء فحص التقنيات لـ: {domain}...")
-            
-            try:
-                analysis = scanner.comprehensive_analysis(domain)
-                
-                if not analysis['ip']:
-                    await processing_msg.edit_text("❌ لم أتمكن من العثور على هذا النطاق")
-                    return
-                
-                report = f"""🔧 تقرير التقنيات: {domain}
-
-📍 المعلومات الأساسية:
-• النطاق: {analysis['hostname']}
-• IP: {analysis['ip']}"""
-                
-                if analysis['technologies']:
-                    tech = analysis['technologies']
-                    report += f"""
-📊 التقنيات المكتشفة:"""
-                    
-                    if tech['web_servers']:
-                        report += f"""
-🖥️  سيرفرات الويب: {', '.join(set(tech['web_servers']))}"""
-                    
-                    if tech['programming_languages']:
-                        report += f"""
-💻 لغات البرمجة: {', '.join(set(tech['programming_languages']))}"""
-                    
-                    if tech['cms']:
-                        report += f"""
-📝 أنظمة إدارة المحتوى: {', '.join(set(tech['cms']))}"""
-                    
-                    if tech['analytics']:
-                        report += f"""
-📈 أدوات التحليلات: {', '.join(set(tech['analytics']))}"""
-                
-                if analysis['cdn']['provider']:
-                    report += f"""
-🌐 مزود CDN: {analysis['cdn']['provider']}"""
-                
-                if analysis['waf']['provider']:
-                    report += f"""
-🛡️  جدار الحماية: {analysis['waf']['provider']}"""
-                
-                report += f"""
-
-🔗 انضم لقناتنا: {TELEGRAM_CHANNEL}"""
-                
-                await processing_msg.edit_text(report)
-                
-            except Exception as e:
-                await processing_msg.edit_text(f"❌ خطأ في فحص التقنيات: {str(e)}")
-
-        async def scan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            if not context.args:
-                await update.message.reply_text("❌ يرجى إدخال نطاق (مثال: /scan example.com)")
-                return
-            
-            domain = context.args[0].lower()
-            await update.message.reply_text(f"🔍 بدء الفحص السريع لـ: {domain}...")
-            
-            try:
-                analysis = scanner.comprehensive_analysis(domain)
-                
-                if not analysis['ip']:
-                    await update.message.reply_text("❌ لم أتمكن من العثور على هذا النطاق")
-                    return
-                
-                report = f"""📊 تقرير الفحص السريع: {domain}
-
-📍 المعلومات الأساسية:
-• النطاق: {analysis['hostname']}
-• IP: {analysis['ip']}"""
-
-                if analysis['tls_info']:
-                    report += f"""
-🔒 معلومات TLS:
-• البروتوكول: {analysis['tls_info']['protocol']}"""
-                
-                if analysis['cdn']['provider']:
-                    report += f"""
-🌐 معلومات CDN:
-• المزود: {analysis['cdn']['provider']}"""
-                
-                if analysis['linked_assets']:
-                    report += f"""
-🔗 الأصول المرتبطة: {len(analysis['linked_assets'])}"""
-                    for asset in list(analysis['linked_assets'])[:3]:
-                        report += f"""
-• {asset}"""
-                
-                report += f"""
-
-💡 استخدم /deepscan {domain} للفحص الشامل
-
-انضم لقناتنا: {TELEGRAM_CHANNEL}"""
-                
-                await update.message.reply_text(report)
-                
-            except Exception as e:
-                await update.message.reply_text(f"❌ خطأ في الفحص: {str(e)}")
-
-        async def fullscan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-            if not context.args:
-                await update.message.reply_text("❌ يرجى إدخال نطاق (مثال: /fullscan example.com)")
-                return
-            
-            domain = context.args[0].lower()
-            processing_msg = await update.message.reply_text(f"🔍 بدء الفحص الشامل لـ: {domain}...")
-            
-            try:
-                analysis = scanner.comprehensive_analysis(domain)
-                all_subdomains = scanner.advanced_subdomain_discovery(domain)
-                
-                if not analysis['ip']:
-                    await processing_msg.edit_text("❌ لم أتمكن من العثور على هذا النطاق")
-                    return
-                
-                report = f"""📊 تقرير الفحص الشامل: {domain}
-
-📈 الإحصائيات:
-• السبردومينات المكتشفة: {len(all_subdomains)}
-
-🌐 المعلومات الأساسية:
-• النطاق: {analysis['hostname']}
-• IP: {analysis['ip']}"""
-
-                if analysis['cdn']['provider']:
-                    report += f"""
-• CDN: {analysis['cdn']['provider']}"""
-                
-                if analysis['waf']['provider']:
-                    report += f"""
-• WAF: {analysis['waf']['provider']}"""
-                
-                # التقنيات
-                if analysis['technologies']:
-                    report += f"""
-🔧 التقنيات الرئيسية:"""
-                    tech = analysis['technologies']
-                    if tech['web_servers']:
-                        report += f"""
-• السيرفر: {', '.join(set(tech['web_servers']))}"""
-                    if tech['programming_languages']:
-                        report += f"""
-• اللغات: {', '.join(set(tech['programming_languages']))}"""
-                
-                # أهم السبردومينات
-                if all_subdomains:
-                    report += f"""
-🌐 أهم السبردومينات:"""
-                    for i, sub in enumerate(all_subdomains[:8], 1):
-                        report += f"""
-{i}. {sub}"""
-                
-                report += f"""
-
-💡 استخدم /deepscan {domain} للفحص العميق
-
-انضم لقناتنا: {TELEGRAM_CHANNEL}"""
-                
-                await processing_msg.edit_text(report)
-                
-            except Exception as e:
-                await processing_msg.edit_text(f"❌ خطأ في الفحص الشامل: {str(e)}")
-
-        # تشغيل البوت
-        application = Application.builder().token(TOKEN).build()
         
-        application.add_handler(CommandHandler("start", start_command))
-        application.add_handler(CommandHandler("scan", scan_command))
-        application.add_handler(CommandHandler("fullscan", fullscan_command))
-        application.add_handler(CommandHandler("deepscan", deepscan_command))
-        application.add_handler(CommandHandler("techscan", techscan_command))
-        
-        print("✅ البوت يعمل على GitHub!")
-        application.run_polling()
-        
-    except ImportError:
-        print("⚠️  مكتبة telegram غير مثبتة - تشغيل وضع GitHub Actions")
-
-# GitHub Actions Integration
-def github_scan_domain(domain):
-    """وظيفة المسح للنطاق لـ GitHub Actions"""
-    print(f"🔍 بدء فحص النطاق: {domain}")
-    
-    try:
-        # التحليل الشامل
-        analysis = scanner.comprehensive_analysis(domain)
-        all_subdomains = scanner.advanced_subdomain_discovery(domain)
-        
-        if not analysis['ip']:
-            return f"❌ لم أتمكن من العثور على النطاق: {domain}"
-        
-        # بناء التقرير
-        report = f"""
-🔬 تقرير فحص النطاق: {domain}
-📊 إحصائيات الاكتشاف:
-• السبردومينات المكتشفة: {len(all_subdomains)}
-
-🌐 المعلومات الأساسية:
-• النطاق: {analysis['hostname']}
-• IP: {analysis['ip']}"""
-
-        if analysis['cdn']['provider']:
-            report += f"""
-• CDN: {analysis['cdn']['provider']}"""
-
-        if analysis['waf']['provider']:
-            report += f"""
-• WAF: {analysis['waf']['provider']}"""
-
-        if analysis['technologies']:
-            tech = analysis['technologies']
+        # معلومات التقنيات
+        if main_analysis['technologies']:
             report += f"""
 🔧 التقنيات المكتشفة:"""
+            tech = main_analysis['technologies']
             if tech['web_servers']:
                 report += f"""
 • سيرفرات الويب: {', '.join(set(tech['web_servers']))}"""
@@ -874,18 +571,37 @@ def github_scan_domain(domain):
             if tech['cms']:
                 report += f"""
 • أنظمة إدارة المحتوى: {', '.join(set(tech['cms']))}"""
-
-        if all_subdomains:
+        
+        # معلومات الأمان
+        if main_analysis['tls_info']:
             report += f"""
-🌐 أهم السبردومينات:"""
-            for i, sub in enumerate(all_subdomains[:10], 1):
+🔒 معلومات TLS متقدمة:
+• البروتوكول: {main_analysis['tls_info']['protocol']}
+• التشفير: {main_analysis['tls_info']['cipher_suite']}"""
+        
+        # السبردومينات النشطة
+        if active_subdomains:
+            report += f"""
+🌐 أهم السبردومينات النشطة ({len(active_subdomains)}):"""
+            for i, sub in enumerate(active_subdomains[:10], 1):
+                cdn_info = f" | CDN: {sub['cdn']['provider']}" if sub['cdn']['provider'] else ""
                 report += f"""
-{i}. {sub}"""
-
+{i}. {sub['hostname']}{cdn_info}"""
+        
+        # الأصول المرتبطة
+        if main_analysis['linked_assets']:
+            report += f"""
+🔗 الأصول الخارجية المرتبطة ({len(main_analysis['linked_assets'])}):"""
+            for asset in list(main_analysis['linked_assets'])[:8]:
+                report += f"""
+• {asset}"""
+        
         report += f"""
 
-✅ تم الفحص بنجاح!
-🔗 القناة: {TELEGRAM_CHANNEL}"""
+✅ تم الفحص العميق بنجاح!
+📊 تم تحليل {len(active_subdomains)} نطاق نشط
+
+🔗 انضم لقناتنا: {TELEGRAM_CHANNEL}"""
         
         return report
         
@@ -902,6 +618,12 @@ if __name__ == '__main__':
         # حفظ النتيجة في ملف
         with open('scan_result.txt', 'w', encoding='utf-8') as f:
             f.write(result)
+        print("✅ تم حفظ النتيجة في scan_result.txt")
     else:
-        # تشغيل بوت التليجرام للاستخدام المحلي
-        run_telegram_bot()
+        # تشغيل محلي للاختبار
+        domain = input("أدخل النطاق للفحص: ").strip()
+        if domain:
+            result = github_scan_domain(domain)
+            print(result)
+        else:
+            print("❌ لم تدخل نطاقاً للفحص")
