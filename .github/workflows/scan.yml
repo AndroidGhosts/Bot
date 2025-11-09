@@ -7,13 +7,10 @@ on:
         description: "Domain to scan"
         required: true
         default: "example.com"
-  schedule:
-    - cron: "0 0 * * *"
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    
     steps:
       - name: "Checkout code"
         uses: actions/checkout@v3
